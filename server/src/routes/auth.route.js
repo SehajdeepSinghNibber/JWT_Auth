@@ -9,6 +9,6 @@ router.post('/logout',logout);
 
 router.post('/signup',signup);
 
-router.get('/authCheck',getMe);
+router.get('/authCheck',protectRoute, authCheck);
 
 export default router;
