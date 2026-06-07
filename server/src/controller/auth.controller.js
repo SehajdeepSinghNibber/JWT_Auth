@@ -1,7 +1,8 @@
 import { User } from '../models/User.js'
 import bcrypt from 'bcryptjs'
 import generateTokenAndSetCookie from '../utils/generateToken.js';
-import { json } from 'express';
+import jwt from "jsonwebtoken";
+import { config } from '../config/config.js';
 
 export const signup = async (req,res) =>{
     
@@ -15,22 +16,22 @@ export const signup = async (req,res) =>{
             })
         }
 
-        const user = await user.findOne({userName})
+        const user = await User.findOne({ userName });
 
         if(user){
-            res.status(400).json({
+            return res.status(400).json({
                 error: "Username already exist"
             })
         }
 
         const salt = await bcrypt.genSalt(10);
-        const hassedPassword = await bcrypt.hash(password,salt);
+        const hashedPassword = await bcrypt.hash(password,salt);
 
-        const newUser = {
+        const newUser = new User({
             userName,
             email,
-            password: hassedPassword
-        }
+            password: hashedPassword
+        })
 
         if(newUser){
             generateTokenAndSetCookie(newUser._id,res);
@@ -60,7 +61,7 @@ export const signup = async (req,res) =>{
 export const login = async (req,res) =>{
     try {
         const { email, password } = req.body;
-        const user = User.findOne({email});
+        const user = await User.findOne({email});
         const isPasswordCorrect = await bcrypt.compare(password,user?.password || "");
 
         if (!user || !isPasswordCorrect){
@@ -88,7 +89,7 @@ export const login = async (req,res) =>{
 
 export const logout = async (req,res) =>{
     try {
-        res.cleaeCookier('jwt-token',"",{maxAge:0})
+        res.clearCookie('jwt-token',"",{maxAge:0})
         res.status(200).json({
                 success:true,
                 message:"Logout Successful"
@@ -101,3 +102,38 @@ export const logout = async (req,res) =>{
         })
     }
 }
+
+export const getMe = async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(" ")[1];
+
+        if (!token) {
+            return res.status(401).json({
+                message: "Token not found"
+            });
+        }
+
+        const decoded = jwt.verify(token, config.JWT_SECRET);
+
+        const user = await User.findById(decoded.id).select("-password");
+
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
+
+        return res.status(200).json({
+            user: {
+                _id: user._id,
+                userName: user.userName,
+                email: user.email
+            }
+        });
+
+    } catch (error) {
+        return res.status(401).json({
+            message: "Invalid token"
+        });
+    }
+};
